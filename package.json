@@ -14,7 +14,7 @@
         "email": "mateusz.mlynek@reality.co"
     },
     "dependencies": {
-        "com.yasirkula.nativeshare": "1.5.0"
+        "com.yasirkula.nativeshare": "https://github.com/yasirkula/UnityNativeShare.git"
      },
     "type": "library"
 }
