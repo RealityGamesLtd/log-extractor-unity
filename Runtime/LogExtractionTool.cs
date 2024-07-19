@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
@@ -11,6 +9,8 @@ namespace LogExtraction
         public bool SaveLogsOnPause { get; private set; } = true;
         private StringBuilder _sb = new();
 
+        private LogStreaming _logStream;
+
         public void Setup(bool enableSaveLogsOnPause = true)
         {
             SaveLogsOnPause = enableSaveLogsOnPause;
@@ -18,53 +18,54 @@ namespace LogExtraction
 
         public void SendLogs()
         {
-            DataSaver.SaveData(_sb.ToString(), "savelog");
-            new NativeShare().AddFile(DataSaver.GetFilePath("savelog"))
+            new NativeShare().AddFile(_logStream.CurrentSessionLogsPath)
                 .SetCallback((result, shareTarget) => Debug.Log("Share result: " + result + ", selected app: " + shareTarget))
                 .Share();
         }
 
-        //Called when there is an exception
-        void LogCallback(string condition, string stackTrace, LogType type)
+        public byte[] GetCurrentSessionLogsBytes()
         {
-            _sb.Append($"{type}\n");
-            _sb.Append($"{DateTime.Now.ToString("yyyy-MM-ddTHH:mm:sszzz")}\n");
-            _sb.Append($"{condition}\n");
-            _sb.Append($"{stackTrace}");
-            _sb.Append($"\n");
+            return _logStream.GetCurrentSessionLogsBytes();
+        }
+
+        public byte[] GetPreviousSessionLogsBytes()
+        {
+            return _logStream.GetPreviousSessionLogsBytes();
         }
 
         void Awake()
         {
+            _logStream = new LogStreaming();
+            
             //Subscribe to Log Event
-            Application.logMessageReceived += LogCallback;
+            Application.logMessageReceived += _logStream.AppendCurrentLog;
         }
 
         void OnDestroy()
         {
             //Un-Subscribe from Log Event
-            Application.logMessageReceived -= LogCallback;
+            Application.logMessageReceived -= _logStream.AppendCurrentLog;
+            
+            _logStream.Dispose();
         }
 
-        //Save log  when focous is lost
-        void OnApplicationFocus(bool hasFocus)
+        //Save log  when focus is lost
+        private void OnApplicationFocus(bool hasFocus)
         {
             if (!hasFocus)
             {
-                //Save
-                if (SaveLogsOnPause)
-                    DataSaver.SaveData(_sb.ToString(), "savelog");
+                // flush buffered logs to file on application out of focus
+                _logStream.Flush();
             }
         }
 
         //Save log on exit
-        void OnApplicationPause(bool pauseStatus)
+        private void OnApplicationPause(bool pauseStatus)
         {
             if (pauseStatus)
             {
-                //Save
-                if (SaveLogsOnPause)
-                    DataSaver.SaveData(_sb.ToString(), "savelog");
+                // flush buffered logs to file on application pause
+                _logStream.Flush();
             }
         }
     }
