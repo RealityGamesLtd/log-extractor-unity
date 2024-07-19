@@ -1,12 +1,11 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
 
 namespace LogExtraction
 {
-    public class LogStreaming : IDisposable, IAsyncDisposable
+    public class LogStreaming : IDisposable
     {
         private const string CURRENT_SESSION_LOGS_FILENAME = "logs.txt";
         private const string PREVIOUS_SESSION_LOGS_FILENAME = "previous-session-logs.txt";
@@ -35,16 +34,6 @@ namespace LogExtraction
                 Directory.CreateDirectory(directoryPath);
             }
             
-            // make sure that current and previous files exist
-            if (File.Exists(_currentSessionLogsPath) == false)
-            {
-                File.Create(_currentSessionLogsPath);
-            }
-            if (File.Exists(_previousSessionLogsPath) == false)
-            {
-                File.Create(_previousSessionLogsPath);
-            }
-            
             CurrentSessionLogs = new FileStream(_currentSessionLogsPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
             
             // if there is a current logs file that is not empty:
@@ -71,7 +60,16 @@ namespace LogExtraction
             {
                 _sb.Append($"{type}\n");
                 _sb.Append($"{timestamp:yyyy-MM-ddTHH:mm:sszzz}\n");
-                _sb.Append($"{condition.Substring(0, Math.Min(condition.Length, LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE))}\n");
+
+                if (condition.Length > LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE)
+                {
+                    _sb.Append($"{condition.Substring(0, Math.Min(condition.Length, LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE))}\n");
+                    _sb.Append("<log message was truncated>\n");
+                }
+                else
+                {
+                    _sb.Append($"{condition}");
+                }
                 _sb.Append($"{stackTrace}");
                 _sb.Append($"\n");
                 
@@ -86,7 +84,7 @@ namespace LogExtraction
         /// </summary>
         /// <param name="filename"></param>
         /// <returns></returns>
-        private string GetFilePath(string filename)
+        private static string GetFilePath(string filename)
         {
             var tempPath = GetDirectoryPath();
             return Path.Combine(tempPath, filename);
@@ -145,19 +143,17 @@ namespace LogExtraction
         public void Dispose()
         {
             Flush();
-            
-            CurrentSessionLogs?.Dispose();
-            PreviousSessionLogs?.Dispose();
-            CurrentSessionLogsWriter?.Dispose();
-        }
 
-        public async ValueTask DisposeAsync()
-        {
-            Flush();
-            
-            if (CurrentSessionLogs != null) await CurrentSessionLogs.DisposeAsync();
-            if (PreviousSessionLogs != null) await PreviousSessionLogs.DisposeAsync();
-            if (CurrentSessionLogsWriter != null) await CurrentSessionLogsWriter.DisposeAsync();
+            try
+            {
+                CurrentSessionLogs?.Dispose();
+                PreviousSessionLogs?.Dispose();
+                CurrentSessionLogsWriter?.Dispose();
+            }
+            catch (Exception _)
+            {
+                // ignored, Dispose can throw an exception, but there is no action that we can take here, we are disposing all resources of this class
+            }
         }
     }
 }
