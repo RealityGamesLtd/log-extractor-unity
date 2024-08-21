@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
 namespace LogExtraction
@@ -19,6 +20,7 @@ namespace LogExtraction
         public string CurrentSessionLogsPath => _currentSessionLogsPath;
         private readonly string _previousSessionLogsPath;
         private readonly StringBuilder _sb;
+        private SynchronizationContext _syncContext;
 
         public LogStreaming()
         {
@@ -33,7 +35,8 @@ namespace LogExtraction
             {
                 Directory.CreateDirectory(directoryPath);
             }
-            
+
+            _syncContext = SynchronizationContext.Current;
             CurrentSessionLogs = new FileStream(_currentSessionLogsPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.Read);
             
             // if there is a current logs file that is not empty:
@@ -53,29 +56,38 @@ namespace LogExtraction
             CurrentSessionLogsWriter = new StreamWriter(CurrentSessionLogs);
         }
 
-        public void AppendCurrentLog(string condition, string stackTrace, LogType type)
+        //A method for synchronizing context for external threads as we listen to logMessageReceivedThreaded 
+        public void AppendCurrentLogSyncContent(string condition, string stackTrace, LogType type)
         {
-            var timestamp = DateTime.Now;
-            lock (_sb)
-            {
-                _sb.Append($"{type}\n");
-                _sb.Append($"{timestamp:yyyy-MM-ddTHH:mm:sszzz}\n");
+            _syncContext.Post(_ => { AppendCurrentLog(condition, stackTrace, type); }, null);
+        }
 
-                if (condition.Length > LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE)
+        private void AppendCurrentLog(string condition, string stackTrace, LogType type)
+        {
+            if (CurrentSessionLogsWriter?.BaseStream != null)
+            {
+                var timestamp = DateTime.Now;
+                lock (_sb)
                 {
-                    _sb.Append($"{condition.Substring(0, Math.Min(condition.Length, LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE))}\n");
-                    _sb.Append("<log message was truncated>\n");
+                    _sb.Append($"{type}\n");
+                    _sb.Append($"{timestamp:yyyy-MM-ddTHH:mm:sszzz}\n");
+
+                    if (condition.Length > LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE)
+                    {
+                        _sb.Append($"{condition.Substring(0, Math.Min(condition.Length, LENGTH_OF_LOG_MESSAGE_TO_WRITE_TO_FILE))}\n");
+                        _sb.Append("<log message was truncated>\n");
+                    }
+                    else
+                    {
+                        _sb.Append($"{condition}");
+                    }
+                    _sb.Append($"{stackTrace}");
+                    _sb.Append($"\n");
+
+                    CurrentSessionLogsWriter.Write(_sb);
+
+                    _sb.Clear();
                 }
-                else
-                {
-                    _sb.Append($"{condition}");
-                }
-                _sb.Append($"{stackTrace}");
-                _sb.Append($"\n");
-                
-                CurrentSessionLogsWriter.Write(_sb);
-                
-                _sb.Clear();
             }
         }
 
