@@ -38,13 +38,13 @@ namespace LogExtraction
             _logStream = new LogStreaming();
             
             //Subscribe to Log Event
-            Application.logMessageReceived += _logStream.AppendCurrentLog;
+            Application.logMessageReceivedThreaded += _logStream.AppendCurrentLogSyncContent;
         }
 
         void OnDestroy()
         {
             //Un-Subscribe from Log Event
-            Application.logMessageReceived -= _logStream.AppendCurrentLog;
+            Application.logMessageReceivedThreaded -= _logStream.AppendCurrentLogSyncContent;
             
             _logStream.Dispose();
         }
